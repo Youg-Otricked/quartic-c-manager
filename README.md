@@ -1,4 +1,4 @@
-A Version & Package Manager for the QuantumC programming language.
+A Version & Package Manager for the QuarticC programming language.
 
 ---
 
@@ -24,7 +24,7 @@ qcm init
 
 ## Project Structure
 
-QuantumC projects have this structure:
+QuarticC projects have this structure:
 
 ```graph
 
@@ -37,10 +37,10 @@ QuantumC projects have this structure:
 │ ├─ index.md
 │ ╵
 ├─┐ lib/
-│ ├─ lib.md
+│ ├─ lib.qc
 │ ╵
 ├─┐ tests/
-│ ├─ test.main.qc
+│ ├─ main.test.qc
 │ ╵
 ├─ main.qc
 │

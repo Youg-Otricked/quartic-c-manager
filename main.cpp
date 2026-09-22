@@ -24,7 +24,7 @@ const std::string QCVM_VERSION = "2.3.0";
 std::unordered_set<std::string> load_tagged_versions() {
     std::unordered_set<std::string> versions;
     httplib::Client client("https://raw.githubusercontent.com");
-    auto res = client.Get("/Youg-Otricked/quantum-c-version-manager/main/tagged_versions.txt");
+    auto res = client.Get("/Youg-Otricked/quartic-c-manager/main/tagged_versions.txt");
     if (!res || res->status != 200) { return versions; }
     std::stringstream stream(res->body);
     std::string line;
@@ -85,7 +85,7 @@ std::unordered_map<std::string, RegistryEntry> parse_registry(const std::string&
 std::unordered_map<std::string, RegistryEntry> load_registry() {
     httplib::Client client("https://raw.githubusercontent.com");
     client.set_default_headers({{"User-Agent", "qcm/1.0"}});
-    auto res = client.Get("/Youg-Otricked/quantum-c-version-manager/main/registry.txt");
+    auto res = client.Get("/Youg-Otricked/quartic-c-manager/main/registry.txt");
     if (!res || res->status != 200) { throw "Failed to download package registry\n"; }
     return parse_registry(res->body);
 }
@@ -317,7 +317,7 @@ std::string getVersions() {
     httplib::Client client("https://api.github.com");
     client.set_default_headers({{"User-Agent", "qcm/1.0"}});
 
-    auto res = client.Get("/repos/Youg-Otricked/QuantumC/releases");
+    auto res = client.Get("/repos/Youg-Otricked/QuarticC/releases");
     if (!res || res->status != 200) { throw "Failed to fetch releases. Are you connected to Wi-Fi?\n"; }
     return res->body;
 }
@@ -345,9 +345,9 @@ std::string getLatestQCTag() {
     httplib::Client client("https://api.github.com");
     client.set_default_headers({{"User-Agent", "qcm/1.0"}});
     client.set_follow_location(true);
-    auto res = client.Get("/repos/Youg-Otricked/QuantumC/releases/latest");
+    auto res = client.Get("/repos/Youg-Otricked/QuarticC/releases/latest");
     if (!res || res->status != 200) {
-        throw "Failed to check for latest QuantumC version. Are you connected to "
+        throw "Failed to check for latest QuarticC version. Are you connected to "
               "Wi-Fi?\n";
     }
     auto json = nlohmann::json::parse(res->body);
@@ -357,7 +357,6 @@ std::string resolveVersion(std::string version) {
     if (version == "latest") { return getLatestQCTag(); }
     return version;
 }
-// https://github.com/Youg-Otricked/QuantumC/releases/download/<tag>/<filename>
 void install(char** args, int argc) {
     if (argc < 3) { throw "Usage: `qcm tooling install <version>`"; }
     std::string resolvedVersion = resolveVersion(args[2]);
@@ -398,7 +397,7 @@ void install(char** args, int argc) {
     size_t downloaded = 0;
 
     auto res = client.Get(
-        "/Youg-Otricked/QuantumC/releases/download/" + std::string(args[2]) + "/" + (getOS() == "linux" ? "qc-linux" : "qc-macos"),
+        "/Youg-Otricked/QuarticC/releases/download/" + std::string(args[2]) + "/" + (getOS() == "linux" ? "qc-linux" : "qc-macos"),
         [&](const httplib::Response& response) {
             total = std::stoull(response.get_header_value("Content-Length", "0"));
             return true;
@@ -422,7 +421,7 @@ void install(char** args, int argc) {
     total = 0;
     downloaded = 0;
     auto stdres = client.Get(
-        "/Youg-Otricked/QuantumC/releases/download/" + std::string(args[2]) + "/stdlib.qc",
+        "/Youg-Otricked/QuarticC/releases/download/" + std::string(args[2]) + "/stdlib.qc",
         [&](const httplib::Response& response) {
             total = std::stoull(response.get_header_value("Content-Length", "0"));
             return true;
@@ -461,14 +460,14 @@ void install(char** args, int argc) {
         std::ofstream out("scope.yaml");
         out << fkyaml::node::serialize(scnode);
     }
-    std::cout << "QuantumC version " << args[2] << " successfuly installed\n";
+    std::cout << "QuarticC version " << args[2] << " successfuly installed\n";
 }
-// https://github.com/Youg-Otricked/quantum-c-version-manager/releases/download/<tag>/<filename>
+// https://github.com/Youg-Otricked/quartic-c-manager/releases/download/<tag>/<filename>
 std::string getLatestQCVMTag() {
     httplib::Client client("https://api.github.com");
     client.set_default_headers({{"User-Agent", "qcm/1.0"}});
     client.set_follow_location(true);
-    auto res = client.Get("/repos/Youg-Otricked/quantum-c-version-manager/releases/latest");
+    auto res = client.Get("/repos/Youg-Otricked/quartic-c-manager/releases/latest");
     if (!res || res->status != 200) { throw "Failed to check for updates. Are you connected to Wi-Fi?\n"; }
     auto json = nlohmann::json::parse(res->body);
     return json["tag_name"].get<std::string>();
@@ -523,7 +522,7 @@ void upgrade(char** args, int argc) {
     size_t total = 0;
     size_t downloaded = 0;
     auto res = client.Get(
-        "/Youg-Otricked/quantum-c-version-manager/releases/download/" + latest_tag + "/" + (getOS() == "linux" ? "qcm-linux" : "qcm-macos"),
+        "/Youg-Otricked/quartic-c-manager/releases/download/" + latest_tag + "/" + (getOS() == "linux" ? "qcm-linux" : "qcm-macos"),
         [&](const httplib::Response& response) {
             total = std::stoull(response.get_header_value("Content-Length", "0"));
             return true;
@@ -616,7 +615,7 @@ void uninstall(char** args, int argc) {
         std::ofstream out("scope.yaml");
         out << fkyaml::node::serialize(scnode);
     }
-    std::cout << "Successfully uninstalled QuantumC version " << args[2] << '\n';
+    std::cout << "Successfully uninstalled QuarticC version " << args[2] << '\n';
 }
 void run(char** args, int argc) {
     if (argc < 3) { throw "usage: `qcm run <command>`"; }
