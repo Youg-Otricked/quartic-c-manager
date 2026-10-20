@@ -1,2 +1,3 @@
 qsuite@|x0.27.05|https://github.com/Youg-Otricked/qsuite/archive/refs/heads/main.tar.gz|Initial Commit
 qclings@|x1.3.0|https://github.com/Youg-Otricked/qclings/archive/refs/heads/main.tar.gz|Initial Commit
+cqb@|x1.3.49|https://github.com/Youg-Otricked/CQB/archive/refs/heads/main.tar.gz|Initial Commit
