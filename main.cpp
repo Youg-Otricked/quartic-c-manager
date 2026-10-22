@@ -19,7 +19,7 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
-const std::string QCVM_VERSION = "2.3.0";
+const std::string QCVM_VERSION = "2.4.0";
 #include <unordered_set>
 std::unordered_set<std::string> load_tagged_versions() {
     std::unordered_set<std::string> versions;
@@ -294,15 +294,7 @@ void init(char** args, int argc) {
     std::getline(std::cin, choice);
     bool multiFile = false;
     if (choice == "Y" || choice == "y") { multiFile = true; }
-    std::cout << "will this project have a api/lib for others to use? (Y/n) ";
-    std::getline(std::cin, choice);
-    bool api = false;
-    if (choice == "Y" || choice == "y") { api = true; }
-    if (api) {
-        std::filesystem::create_directory("lib");
-        std::ofstream("lib/lib.qc", std::ios::app).close();
-    }
-    for (const auto& dir : {"dependencies", "tests", "docs"}) { std::filesystem::create_directory(dir); }
+    for (const auto& dir : {"dependencies", "tests", "docs", "lib", "src", "scripts", "notes", "examples"}) { std::filesystem::create_directory(dir); }
     std::ofstream("docs/index.md", std::ios::app).close();
     std::ofstream mainFile("main.qc");
     mainFile << inlineDirs << entrypointLine << (multiFile ? "namespace Exported {\n    \n}\n" : "") << "int " << entry << "() {\n"
@@ -741,9 +733,7 @@ void add(char** args, int argc) {
     std::cout << "Added dependency '" << name << "' -> " << source << '\n';
 }
 void removeAliasFromCommands(fkyaml::node& root, const std::string& name) {
-    if (root.contains("aliases")) {
-        root["aliases"].as_map().erase(name);
-    }
+    if (root.contains("aliases")) { root["aliases"].as_map().erase(name); }
     if (!root.contains("commands")) return;
     auto& commands = root["commands"];
     std::string alias = "-ad " + name + " dependencies/" + name;
@@ -753,13 +743,9 @@ void removeAliasFromCommands(fkyaml::node& root, const std::string& name) {
         size_t pos = cmd.find(alias);
         if (pos != std::string::npos) {
             size_t erase_start = pos;
-            if (erase_start > 0 && cmd[erase_start - 1] == ' ') {
-                erase_start--;
-            }
+            if (erase_start > 0 && cmd[erase_start - 1] == ' ') { erase_start--; }
             cmd.erase(erase_start, alias.size() + (erase_start != pos ? 1 : 0));
-            while (cmd.find("  ") != std::string::npos) {
-                cmd.replace(cmd.find("  "), 2, " ");
-            }
+            while (cmd.find("  ") != std::string::npos) { cmd.replace(cmd.find("  "), 2, " "); }
         }
 
         cmd_node = cmd;
