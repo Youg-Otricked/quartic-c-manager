@@ -19,7 +19,7 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
-const std::string QCVM_VERSION = "2.4.0";
+const std::string QCVM_VERSION = "2.5.0";
 #include <unordered_set>
 std::unordered_set<std::string> load_tagged_versions() {
     std::unordered_set<std::string> versions;
@@ -176,8 +176,6 @@ void setup(char** args, int argc) {
     std::filesystem::create_directories(home + "/.qcm/packages");
     std::filesystem::create_directories(home + "/.qcm/versions");
     std::filesystem::create_directories(home + "/.qcm/bin");
-    std::filesystem::create_directories(home + "/.qc/bin");
-    std::filesystem::create_directories(home + "/.qc/lib");
     if (!std::filesystem::exists(home + "/.qcm/config.yaml")) {
         std::ofstream file(home + "/.qcm/config.yaml");
         auto node = fkyaml::node::deserialize(R"(
@@ -199,23 +197,15 @@ current: null
     } else {
         rcFile = home + "/.bashrc";
     }
-    std::string qcPath;
     std::string qcmPath;
     if (shell.ends_with("fish")) {
-        qcPath = "fish_add_path $HOME/.qc/bin";
         qcmPath = "fish_add_path $HOME/.qcm/bin";
     } else {
-        qcPath = "export PATH=\"$HOME/.qc/bin:$PATH\"";
         qcmPath = "export PATH=\"$HOME/.qcm/bin:$PATH\"";
     }
     std::ifstream in(rcFile);
     std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     std::ofstream out(rcFile, std::ios::app);
-    if (content.find(".qc/bin") == std::string::npos) {
-        out << "\n# Added by qcm\n";
-        out << qcPath << "\n";
-        std::cout << "Added ~/.qc/bin to PATH\n";
-    }
     if (content.find(".qcm/bin") == std::string::npos) {
         out << "\n# Added by qcm\n";
         out << qcmPath << "\n";
@@ -294,7 +284,9 @@ void init(char** args, int argc) {
     std::getline(std::cin, choice);
     bool multiFile = false;
     if (choice == "Y" || choice == "y") { multiFile = true; }
-    for (const auto& dir : {"dependencies", "tests", "docs", "lib", "src", "scripts", "notes", "examples"}) { std::filesystem::create_directory(dir); }
+    for (const auto& dir : {"dependencies", "tests", "docs", "lib", "src", "scripts", "notes", "examples"}) {
+        std::filesystem::create_directory(dir);
+    }
     std::ofstream("docs/index.md", std::ios::app).close();
     std::ofstream mainFile("main.qc");
     mainFile << inlineDirs << entrypointLine << (multiFile ? "namespace Exported {\n    \n}\n" : "") << "int " << entry << "() {\n"
@@ -352,11 +344,10 @@ std::string resolveVersion(std::string version) {
 void install(char** args, int argc) {
     if (argc < 3) { throw "Usage: `qcm tooling install <version>`"; }
     std::string resolvedVersion = resolveVersion(args[2]);
-    args[2] = resolvedVersion.data();
     if (!isValidVersion(resolvedVersion.data())) { throw "Please pass a valid version."; }
     std::string currentQCVersion = getCurrentQCVersion();
     if (getConfigFileNode()["installed"].contains(resolvedVersion)) {
-        throw "Version " + resolvedVersion + "already installed. Did you mean to run `qcm use " + args[2] + "`?";
+        throw "Version " + resolvedVersion + " already installed. Did you mean to run `qcm use " + args[2] + "`?";
     }
     auto node = getConfigFileNode();
     auto& installed = node["installed"];
@@ -373,86 +364,59 @@ void install(char** args, int argc) {
         saveConfigFileNode(node);
     }
     if (currentQCVersion == resolvedVersion) {
-        throw "Version " + resolvedVersion + " is already installed. Did you mean to run `qcm use " + args[2] +
-            "`? (JK it wasnt stored becuase you installed it but not via QCVM)";
+        throw "Version " + resolvedVersion + " is already installed. Did you mean to run `qcm use " + args[2] + "`?";
     }
-    httplib::Client client("https://github.com");
-    client.set_default_headers({{"User-Agent", "qcm/1.0"}});
-    client.set_follow_location(true);
     const char* home_raw = getenv("HOME");
     if (!home_raw) { throw "HOME not set\n"; }
     std::string home(home_raw);
     std::string versionDir = home + "/.qcm/versions/";
-    std::string binPath = versionDir + "qc-" + args[2];
-    std::ofstream binFile(binPath, std::ios::binary);
-    size_t total = 0;
-    size_t downloaded = 0;
+    std::string qcBin = home + "/.qc/bin/qc";
+    std::string qcStdlib = home + "/.qc/lib/stdlib.qc";
+    std::filesystem::create_directories(versionDir);
+    bool firstInstall = !std::filesystem::exists(home + "/.qc");
+    std::string mode = firstInstall ? "" : "--update ";
+    if (!firstInstall) {
+        if (!currentQCVersion.empty() && std::filesystem::exists(qcBin)) {
+            std::filesystem::copy_file(qcBin, versionDir + "qc-" + currentQCVersion, std::filesystem::copy_options::overwrite_existing);
+            if (std::filesystem::exists(qcStdlib))
+                std::filesystem::copy_file(qcStdlib, versionDir + "stdlib-" + currentQCVersion + ".qc",
+                                           std::filesystem::copy_options::overwrite_existing);
+        }
+    }
+    if (firstInstall) std::cout << "Installing C⁴ for the first time. May require sudo to install dependencies\n";
+    std::string script = std::filesystem::temp_directory_path().string() + "/qc-install-" + std::to_string(getpid()) + ".sh";
+    std::string url = "https://raw.githubusercontent.com/Youg-Otricked/QuarticC/" + resolvedVersion + "/scripts/install.sh";
+    std::string cmd = "curl -fsSL '" + url + "' -o '" + script + "' && QC_YES=1 sh '" + script + "' " + mode + "--version '" + resolvedVersion + "'";
+    std::cout << "Building QuarticC " << resolvedVersion << " from source (this can take a few minutes)...\n";
+    int rc = system(cmd.c_str());
+    std::filesystem::remove(script);
+    if (rc != 0) {
+        if (!currentQCVersion.empty() && std::filesystem::exists(versionDir + "qc-" + currentQCVersion)) {
+            std::filesystem::copy_file(versionDir + "qc-" + currentQCVersion, qcBin, std::filesystem::copy_options::overwrite_existing);
+            if (std::filesystem::exists(versionDir + "stdlib-" + currentQCVersion + ".qc"))
+                std::filesystem::copy_file(versionDir + "stdlib-" + currentQCVersion + ".qc", qcStdlib,
+                                           std::filesystem::copy_options::overwrite_existing);
+        }
+        throw "Install of " + resolvedVersion + " failed. See the qc-install log in your temp dir.\n";
+    }
 
-    auto res = client.Get(
-        "/Youg-Otricked/QuarticC/releases/download/" + std::string(args[2]) + "/" + (getOS() == "linux" ? "qc-linux" : "qc-macos"),
-        [&](const httplib::Response& response) {
-            total = std::stoull(response.get_header_value("Content-Length", "0"));
-            return true;
-        },
-        [&](const char* data, size_t len) {
-            binFile.write(data, len);
-            downloaded += len;
-            int pct = total ? (downloaded * 100 / total) : 0;
-            int bars = pct / 5;
-            std::cout << "\rInstalling QC - [" << std::string(bars, '=') << std::string(20 - bars, ' ') << "] " << pct << "%" << std::flush;
-            return true;
-        });
-    std::cout << '\n';
-    binFile.close();
-    if (!res || res->status != 200) {
-        std::filesystem::remove(binPath);
-        throw "Failed to fetch qc. Are you connected to Wi-Fi?\n";
-    }
-    std::string stdlibPath = versionDir + "stdlib-" + args[2] + ".qc";
-    std::ofstream stdlibFile(stdlibPath, std::ios::binary);
-    total = 0;
-    downloaded = 0;
-    auto stdres = client.Get(
-        "/Youg-Otricked/QuarticC/releases/download/" + std::string(args[2]) + "/stdlib.qc",
-        [&](const httplib::Response& response) {
-            total = std::stoull(response.get_header_value("Content-Length", "0"));
-            return true;
-        },
-        [&](const char* data, size_t len) {
-            stdlibFile.write(data, len);
-            downloaded += len;
-            int pct = total ? (downloaded * 100 / total) : 0;
-            int bars = pct / 5;
-            std::cout << "\rInstalling QC Stdlib - [" << std::string(bars, '=') << std::string(20 - bars, ' ') << "] " << pct << "%" << std::flush;
-            return true;
-        });
-    std::cout << '\n';
-    stdlibFile.close();
-    if (!stdres || stdres->status != 200) {
-        std::filesystem::remove(stdlibPath);
-        throw "Failed to fetch qc stdlib. Are you connected to Wi-Fi?\n";
-    }
-    std::string qcBin = home + "/.qc" + "/bin";
-    std::string qcStdlib = home + "/.qc" + "/lib";
-    if (std::filesystem::exists(qcBin + "/qc")) { std::filesystem::rename(qcBin + "/qc", versionDir + "qc-" + currentQCVersion); }
-    if (std::filesystem::exists(qcStdlib + "/stdlib.qc")) {
-        std::filesystem::rename(qcStdlib + "/stdlib.qc", versionDir + "stdlib-" + currentQCVersion + ".qc");
-    }
-    std::filesystem::rename(binPath, qcBin + "/qc");
-    std::filesystem::rename(stdlibPath, qcStdlib + "/stdlib.qc");
+    std::filesystem::copy_file(qcBin, versionDir + "qc-" + resolvedVersion, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(qcStdlib, versionDir + "stdlib-" + resolvedVersion + ".qc", std::filesystem::copy_options::overwrite_existing);
     auto snode = getConfigFileNode();
-    snode["installed"].as_seq().emplace_back(args[2]);
-    snode["current"] = args[2];
-    chmod((qcBin + "/qc").c_str(), 0755);
+    snode["installed"].as_seq().emplace_back(resolvedVersion);
+    snode["current"] = resolvedVersion;
     saveConfigFileNode(snode);
     if (std::filesystem::exists("scope.yaml")) {
-        std::ifstream in("scope.yaml");
-        auto scnode = fkyaml::node::deserialize(in);
-        scnode["project"]["qc_version"] = std::string(args[2]);
+        fkyaml::node scnode;
+        {
+            std::ifstream in("scope.yaml");
+            scnode = fkyaml::node::deserialize(in);
+        }
+        scnode["project"]["qc_version"] = resolvedVersion;
         std::ofstream out("scope.yaml");
         out << fkyaml::node::serialize(scnode);
     }
-    std::cout << "QuarticC version " << args[2] << " successfuly installed\n";
+    std::cout << "QuarticC version " << resolvedVersion << " successfully installed\n";
 }
 // https://github.com/Youg-Otricked/quartic-c-manager/releases/download/<tag>/<filename>
 std::string getLatestQCVMTag() {
