@@ -19,7 +19,7 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
-const std::string QCVM_VERSION = "2.5.0";
+const std::string QCVM_VERSION = "2.5.1";
 #include <unordered_set>
 std::unordered_set<std::string> load_tagged_versions() {
     std::unordered_set<std::string> versions;
@@ -371,7 +371,7 @@ void install(char** args, int argc) {
     std::string home(home_raw);
     std::string versionDir = home + "/.qcm/versions/";
     std::string qcBin = home + "/.qc/bin/qc";
-    std::string qcStdlib = home + "/.qc/lib/stdlib.qc";
+    std::string qcStdlib = home + "/.qc/lib/std";
     std::filesystem::create_directories(versionDir);
     bool firstInstall = !std::filesystem::exists(home + "/.qc");
     std::string mode = firstInstall ? "" : "--update ";
@@ -379,7 +379,7 @@ void install(char** args, int argc) {
         if (!currentQCVersion.empty() && std::filesystem::exists(qcBin)) {
             std::filesystem::copy_file(qcBin, versionDir + "qc-" + currentQCVersion, std::filesystem::copy_options::overwrite_existing);
             if (std::filesystem::exists(qcStdlib))
-                std::filesystem::copy_file(qcStdlib, versionDir + "stdlib-" + currentQCVersion + ".qc",
+                std::filesystem::copy_file(qcStdlib, versionDir + "std-" + currentQCVersion,
                                            std::filesystem::copy_options::overwrite_existing);
         }
     }
@@ -393,15 +393,15 @@ void install(char** args, int argc) {
     if (rc != 0) {
         if (!currentQCVersion.empty() && std::filesystem::exists(versionDir + "qc-" + currentQCVersion)) {
             std::filesystem::copy_file(versionDir + "qc-" + currentQCVersion, qcBin, std::filesystem::copy_options::overwrite_existing);
-            if (std::filesystem::exists(versionDir + "stdlib-" + currentQCVersion + ".qc"))
-                std::filesystem::copy_file(versionDir + "stdlib-" + currentQCVersion + ".qc", qcStdlib,
+            if (std::filesystem::exists(versionDir + "std-" + currentQCVersion))
+                std::filesystem::copy_file(versionDir + "std-" + currentQCVersion, qcStdlib,
                                            std::filesystem::copy_options::overwrite_existing);
         }
         throw "Install of " + resolvedVersion + " failed. See the qc-install log in your temp dir.\n";
     }
 
     std::filesystem::copy_file(qcBin, versionDir + "qc-" + resolvedVersion, std::filesystem::copy_options::overwrite_existing);
-    std::filesystem::copy_file(qcStdlib, versionDir + "stdlib-" + resolvedVersion + ".qc", std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(qcStdlib, versionDir + "std-" + resolvedVersion, std::filesystem::copy_options::overwrite_existing);
     auto snode = getConfigFileNode();
     snode["installed"].as_seq().emplace_back(resolvedVersion);
     snode["current"] = resolvedVersion;
@@ -515,7 +515,7 @@ void use(char** args, int argc) {
     std::string home(home_raw);
     std::string versionDir = home + "/.qcm/versions/";
     std::string binPath = versionDir + "qc-" + version;
-    std::string stdlibPath = versionDir + "stdlib-" + version + ".qc";
+    std::string stdlibPath = versionDir + "std-" + version;
     if (!std::filesystem::exists(binPath) || !std::filesystem::exists(stdlibPath)) {
         throw "Version " + version + " not installed. Run `qcm install " + version + "`";
     }
@@ -523,11 +523,11 @@ void use(char** args, int argc) {
     std::string qcLib = home + "/.qc/lib";
     std::string currentVersion = getCurrentQCVersion();
     if (std::filesystem::exists(qcBin + "/qc")) { std::filesystem::rename(qcBin + "/qc", versionDir + "qc-" + currentVersion); }
-    if (std::filesystem::exists(qcLib + "/stdlib.qc")) {
-        std::filesystem::rename(qcLib + "/stdlib.qc", versionDir + "stdlib-" + currentVersion + ".qc");
+    if (std::filesystem::exists(qcLib + "/std")) {
+        std::filesystem::rename(qcLib + "/std", versionDir + "std-" + currentVersion);
     }
     std::filesystem::rename(binPath, qcBin + "/qc");
-    std::filesystem::rename(stdlibPath, qcLib + "/stdlib.qc");
+    std::filesystem::rename(stdlibPath, qcLib + "/std");
     chmod((qcBin + "/qc").c_str(), 0755);
     auto node = getConfigFileNode();
     node["current"] = version;
@@ -551,12 +551,12 @@ void uninstall(char** args, int argc) {
     if (!home_raw) throw "HOME not set\n";
     std::string home(home_raw);
     if (std::filesystem::exists(home + "/.qcm/versions/qc-" + args[2])) { std::filesystem::remove(home + "/.qcm/versions/qc-" + args[2]); }
-    if (std::filesystem::exists(home + "/.qcm/versions/stdlib-" + args[2] + ".qc")) {
-        std::filesystem::remove(home + "/.qcm/versions/stdlib-" + args[2] + ".qc");
+    if (std::filesystem::exists(home + "/.qcm/versions/std-" + args[2])) {
+        std::filesystem::remove(home + "/.qcm/versions/std-" + args[2]);
     }
     if (getCurrentQCVersion() == args[2]) {
         if (std::filesystem::exists(home + "/.qc/bin/qc")) { std::filesystem::remove(home + "/.qc/bin/qc"); }
-        if (std::filesystem::exists(home + "/.qc/lib/stdlib.qc")) { std::filesystem::remove(home + "/.qc/lib/stdlib.qc"); }
+        if (std::filesystem::exists(home + "/.qc/lib/std")) { std::filesystem::remove(home + "/.qc/lib/std"); }
     }
     auto node = getConfigFileNode();
     auto& seq = node["installed"].as_seq();
